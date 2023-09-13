@@ -26,7 +26,6 @@ fig2 = lightcurve()
 app.layout = html.Div([
     dcc.Graph(id="graph-id", figure=fig),
     dcc.Graph(id="1234567", figure=fig2),
-    html.Div(id="div"),
     trace_updater.TraceUpdater(id="trace-updater", gdID="graph-id"),
     trace_updater.TraceUpdater(id="b", gdID="1234567")
 ])
@@ -37,25 +36,21 @@ fig2.register_update_graph_callback(app, "1234567", "b")
 first = False
 second = False
 
-
-# @app.callback(Output("1234567", "relayoutData"),
-#               Output("1234567", "figure"),
-#               Input('graph-id', 'relayoutData'))
-# def display_relayout_data(relayoutData):
-#     fig2.plotly_update(relayout_data=relayoutData)
-#     return relayoutData, fig2
-
-
 @app.callback(Output("1234567", "relayoutData"),
               Output("1234567", "figure"),
               Input('graph-id', 'relayoutData'))
 def display_relayout_data(relayoutData):
     global first, second
     if not second:
+
         first = True
+        if relayoutData and "autosize" in relayoutData and relayoutData["autosize"]:
+            fig2.layout = {"autosize": True}
+        elif relayoutData and "yaxis.autorange" not in relayoutData:
+            relayoutData["yaxis.autorange"] = False
+
         fig2.plotly_update(relayout_data=relayoutData)
         return relayoutData, fig2
-    first = False
     second = False
 
 
@@ -64,11 +59,18 @@ def display_relayout_data(relayoutData):
               Input('1234567', 'relayoutData'))
 def display_relayout_data(relayoutData):
     global first, second
+
     if not first:
+
         second = True
+
+        if relayoutData and "autosize" in relayoutData and relayoutData["autosize"]:
+            fig.layout = {"autosize": True}
+        elif relayoutData and "yaxis.autorange" not in relayoutData:
+            relayoutData["yaxis.autorange"] = False
+
         fig.plotly_update(relayout_data=relayoutData)
         return relayoutData, fig
-    second = False
     first = False
 
 
