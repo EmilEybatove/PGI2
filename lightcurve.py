@@ -1,9 +1,11 @@
 from h5py import File
-import plotly.graph_objects as go, trace_updater
+import plotly.graph_objects as go
+import trace_updater
 from plotly_resampler import FigureResampler
 import numpy as np
 from dash import Dash, html, dcc, Input, Output
 import pandas as pd
+import sys
 
 app = Dash(__name__)
 
@@ -74,4 +76,5 @@ def display_relayout_data(relayoutData):
     first = False
 
 
-app.run('127.0.0.1', port=5000)  # debug=True
+# app.run(host='127.0.0.1', port=5000)  # debug=True
+app.run(host=sys.argv[1], port=int(sys.argv[2]))
