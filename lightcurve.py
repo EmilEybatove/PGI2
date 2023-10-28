@@ -10,7 +10,7 @@ import sys
 app = Dash(__name__)
 
 
-def lightcurve(filename=f'./2022_23/2022_23/2022-10-05-18_32-19_32.mat'):
+def lightcurve(filename=f'./2022_23/2022-10-05-18_32-19_32.mat'):
     file = File(filename)
 
     time = np.ravel(file.get("unixtime_dbl_global"))
@@ -26,21 +26,22 @@ fig = lightcurve()
 fig2 = lightcurve()
 
 app.layout = html.Div([
-    dcc.Graph(id="graph-id", figure=fig),
-    dcc.Graph(id="1234567", figure=fig2),
-    trace_updater.TraceUpdater(id="trace-updater", gdID="graph-id"),
-    trace_updater.TraceUpdater(id="b", gdID="1234567")
+    dcc.Graph(id="first_graph", figure=fig),
+    dcc.Graph(id="second_graph", figure=fig2),
+    trace_updater.TraceUpdater(id="trace-updater", gdID="first_graph"),
+    trace_updater.TraceUpdater(id="trace2-updater", gdID="second_graph")
 ])
 
-fig.register_update_graph_callback(app, "graph-id", "trace-updater")
-fig2.register_update_graph_callback(app, "1234567", "b")
+fig.register_update_graph_callback(app, "first_graph", "trace-updater")
+fig2.register_update_graph_callback(app, "second_graph", "trace2-updater")
 
 first = False
 second = False
 
-@app.callback(Output("1234567", "relayoutData"),
-              Output("1234567", "figure"),
-              Input('graph-id', 'relayoutData'))
+
+@app.callback(Output("second_graph", "relayoutData"),
+              Output("second_graph", "figure"),
+              Input('first_graph', 'relayoutData'))
 def display_relayout_data(relayoutData):
     global first, second
     if not second:
@@ -56,9 +57,9 @@ def display_relayout_data(relayoutData):
     second = False
 
 
-@app.callback(Output("graph-id", "relayoutData"),
-              Output("graph-id", "figure"),
-              Input('1234567', 'relayoutData'))
+@app.callback(Output("first_graph", "relayoutData"),
+              Output("first_graph", "figure"),
+              Input('second_graph', 'relayoutData'))
 def display_relayout_data(relayoutData):
     global first, second
 
@@ -77,4 +78,9 @@ def display_relayout_data(relayoutData):
 
 
 # app.run(host='127.0.0.1', port=5000)  # debug=True
-app.run(host=sys.argv[1], port=int(sys.argv[2]))
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        app.run(host=sys.argv[1], port=int(sys.argv[2]))
+    else:
+        print(sys.argv)
+        app.run(host="localhost", port=5000)

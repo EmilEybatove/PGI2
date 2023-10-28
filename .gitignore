@@ -1,2 +1,4 @@
+*.mat
+*.zip
 mat
 venv
