@@ -6,13 +6,9 @@ from h5py import File
 import plotly.graph_objects as go
 from dash import Dash, html, dcc, Input, Output
 import pandas as pd
-import time
-from datetime import datetime
+import sys
 
 app = Dash(__name__)
-
-
-# ./mat/2022-10-05-18_32-19_32.mat
 
 
 class Keogram:
@@ -20,11 +16,11 @@ class Keogram:
         self.filename = filename
         file = File(filename)
         time = np.ravel(file.get("unixtime_dbl_global"))
-        self.time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
+        time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
         diag_global = file.get("diag_global")
         diag_global = np.rot90(diag_global)
         file.close()
-        self.size = self.time.size
+        self.size = time.size
         self.first_diag = {
             "x": time,
             "y": diag_global[0],
@@ -35,27 +31,24 @@ class Keogram:
         self.data = diag_global[1:]
         data = self.update()
         self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1]))
-        self.dcc = dcc.Graph(id="id", figure=self.figure)
+        self.dcc = dcc.Graph(id="keogram", figure=self.figure)
 
     def update(self, relayoutData=None):
         res = []
         start, end = 0, self.size
         if relayoutData and "xaxis.range[0]" in relayoutData:
-            start = time.mktime(
-                datetime.strptime(relayoutData["xaxis.range[0]"], "%Y-%m-%d %H:%M:%S.%f").timetuple()) - time.timezone
-            end = time.mktime(
-                datetime.strptime(relayoutData["xaxis.range[1]"], "%Y-%m-%d %H:%M:%S.%f").timetuple()) - time.timezone
 
-            start, end = PlotlyAggregatorParser.get_start_end_indices(self.first_diag, start=start,
-                                                                      end=end,
-                                                                      axis_type=None)
+            start, end = PlotlyAggregatorParser.get_start_end_indices(self.first_diag,
+                                                                      start=relayoutData["xaxis.range[0]"],
+                                                                      end=relayoutData["xaxis.range[1]"],
+                                                                      axis_type="date")
 
         x, y, indexes = PlotlyAggregatorParser.aggregate(self.first_diag, start, end)
         res.append(y)
 
         for i in range(15):
             res.append(self.data[i][indexes])
-        return self.time[indexes], res
+        return x, res
 
 
 keogram = Keogram()
@@ -65,12 +58,13 @@ app.layout = html.Div([
 ])
 
 
-@app.callback(Output('id', 'figure'),
-              Input('id', 'relayoutData'))
-def display_relayout_data(relayoutData):
+@app.callback(Output('keogram', 'figure'),
+              Input('keogram', 'relayoutData'))
+def update_keogram(relayoutData):
     data = keogram.update(relayoutData)
     return go.Figure(data=go.Heatmap(x=data[0], z=data[1]))
 
 
-app.run(host='127.0.0.1', port=5050, debug=True)
-# print(keogram.figure)
+# app.run(host='127.0.0.1', port=5050, debug=True)
+
+app.run(host=sys.argv[1], port=int(sys.argv[2]))
