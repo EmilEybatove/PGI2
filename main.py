@@ -1,12 +1,86 @@
-from h5py import File
-import plotly.graph_objects as go, trace_updater
+import plotly.graph_objects as go
+import trace_updater
 from plotly_resampler import FigureResampler
-import numpy as np
 from dash import Dash, html, dcc, Input, Output
 from dash.html import Div, Em, Span, A, Img, Br
 import pandas as pd
+from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
+import numpy as np
+from plotly_resampler.aggregation.aggregators import MinMaxAggregator
+from plotly_resampler.aggregation import MedDiffGapHandler
+from h5py import File
+from dash import Dash, html, dcc, Input, Output
+import sys
+
 
 app = Dash(__name__)
+
+filename = "./mat/matlab.mat"
+file = File(filename)
+time = np.ravel(file.get("unixtime_dbl_global"))
+time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
+size = time.size
+
+
+class Keogram:
+    def __init__(self, filename="./mat/matlab.mat", max_n_samples=1000):
+        diag_global = file.get("diag_global")
+        diag_global = np.rot90(diag_global)
+        file.close()
+        self.first_diag = {
+            "x": time,
+            "y": diag_global[0],
+            "max_n_samples": max_n_samples,
+            "downsampler": MinMaxAggregator(),
+            "gap_handler": MedDiffGapHandler()
+        }
+        self.data = diag_global[1:]
+        data = self.update()
+        self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1]))
+        self.dcc = dcc.Graph(id="keogram", figure=self.figure)
+
+    def update(self, relayoutData=None):
+        res = []
+        start, end = 0, size
+        if relayoutData and "xaxis.range[0]" in relayoutData:
+            start, end = PlotlyAggregatorParser.get_start_end_indices(self.first_diag,
+                                                                      start=relayoutData["xaxis.range[0]"],
+                                                                      end=relayoutData["xaxis.range[1]"],
+                                                                      axis_type="date")
+
+        x, y, indexes = PlotlyAggregatorParser.aggregate(self.first_diag, start, end)
+        res.append(y)
+
+        for i in range(15):
+            res.append(self.data[i][indexes])
+        return x, res
+
+
+class Lightcurve:
+    def __init__(self, filename="./mat/matlab.mat", max_n_samples=1000):
+        file = File(filename)
+
+        self.light = {
+            "x": time,
+            "y": np.ravel(file.get("lightcurvesum_global")),
+            "max_n_samples": max_n_samples,
+            "downsampler": MinMaxAggregator(),
+            "gap_handler": MedDiffGapHandler()
+        }
+        data = self.update()
+        self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]))
+        self.dcc = dcc.Graph(id="lightcurve", figure=self.figure)
+
+    def update(self, relayoutData=None):
+        start, end = 0, size
+        if relayoutData and "xaxis.range[0]" in relayoutData:
+            start, end = PlotlyAggregatorParser.get_start_end_indices(self.light,
+                                                                      start=relayoutData["xaxis.range[0]"],
+                                                                      end=relayoutData["xaxis.range[1]"],
+                                                                      axis_type="date")
+        x, y, indexes = PlotlyAggregatorParser.aggregate(self.light, start, end)
+        return x, y
+
 
 head_bar = Div(
     className="head-bar",
@@ -30,7 +104,6 @@ head_bar = Div(
     ]
 )
 
-
 head_center = Div(
     className="center",
     children=A(
@@ -50,7 +123,14 @@ head = Div(
     children=[head_bar, head_center]
 )
 
-app.layout = head
+lightcurve = Lightcurve()
+keogram = Keogram()
+
+app.layout = Div([
+    head,
+    lightcurve.dcc,
+    keogram.dcc
+])
 
 if __name__ == "__main__":
     app.run('127.0.0.1', port=5001)
