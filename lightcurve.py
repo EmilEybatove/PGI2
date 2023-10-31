@@ -1,86 +1,71 @@
+from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
+import numpy as np
+from plotly_resampler.aggregation.aggregators import MinMaxAggregator
+from plotly_resampler.aggregation import MedDiffGapHandler
 from h5py import File
 import plotly.graph_objects as go
-import trace_updater
-from plotly_resampler import FigureResampler
-import numpy as np
 from dash import Dash, html, dcc, Input, Output
 import pandas as pd
+from math import floor, ceil
 import sys
 
 app = Dash(__name__)
 
 
-def lightcurve(filename=f'./2022_23/2022-10-05-18_32-19_32.mat'):
-    file = File(filename)
+class Lightcurve:
+    def __init__(self, filename="./mat/matlab.mat", max_n_samples=1000):
+        self.filename = filename
+        self.max_n_samples = max_n_samples
+        file = File(filename)
+        time = np.ravel(file.get("unixtime_dbl_global"))
+        time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
+        self.light = {
+            "x": time,
+            "y": np.ravel(file.get("lightcurvesum_global")),
+            "max_n_samples": max_n_samples,
+            "downsampler": MinMaxAggregator(),
+            "gap_handler": MedDiffGapHandler()
+        }
+        file.close()
+        self.size = time.size
+        data = self.update()
+        self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]))
 
-    time = np.ravel(file.get("unixtime_dbl_global"))
-    time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
-    light = np.ravel(file.get("lightcurvesum_global"))
+        self.dcc = html.Div([
+            dcc.Graph(id="lightcurve", figure=self.figure, style={'float': 'left', "width": "90%"}),
+            html.Div(style={'float': 'right'})
+        ])
 
-    fig = FigureResampler(go.Figure())
-    fig.add_trace(go.Scattergl(name='lightcurve', showlegend=True), hf_x=time, hf_y=light)
-    return fig
+        @app.callback(Output('lightcurve', 'figure'),
+                      Input('lightcurve', 'relayoutData'))
+        def update_lightcurve(relayoutData):
+            data = self.update(relayoutData)
+            self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]))
+            if relayoutData:
+                self.figure.plotly_relayout(relayoutData)
+            return self.figure
+
+    def update(self, relayoutData=None):
+
+        start, end = 0, self.size
+
+        if relayoutData:
+            if "xaxis.range[0]" in relayoutData:
+                start, end = PlotlyAggregatorParser.get_start_end_indices(self.light,
+                                                                          start=relayoutData["xaxis.range[0]"],
+                                                                          end=relayoutData["xaxis.range[1]"],
+                                                                          axis_type="date")
+
+        x, y, indexes = PlotlyAggregatorParser.aggregate(self.light, start, end)
+        return x, y
 
 
-fig = lightcurve()
-fig2 = lightcurve()
+lightcurve = Lightcurve()
 
 app.layout = html.Div([
-    dcc.Graph(id="first_graph", figure=fig),
-    dcc.Graph(id="second_graph", figure=fig2),
-    trace_updater.TraceUpdater(id="trace-updater", gdID="first_graph"),
-    trace_updater.TraceUpdater(id="trace2-updater", gdID="second_graph")
+    lightcurve.dcc
 ])
 
-fig.register_update_graph_callback(app, "first_graph", "trace-updater")
-fig2.register_update_graph_callback(app, "second_graph", "trace2-updater")
+app.run(host='127.0.0.1', port=5000, debug=True)
 
-first = False
-second = False
-
-
-@app.callback(Output("second_graph", "relayoutData"),
-              Output("second_graph", "figure"),
-              Input('first_graph', 'relayoutData'))
-def display_relayout_data(relayoutData):
-    global first, second
-    if not second:
-
-        first = True
-        if relayoutData and "autosize" in relayoutData and relayoutData["autosize"]:
-            fig2.layout = {"autosize": True}
-        elif relayoutData and "yaxis.autorange" not in relayoutData:
-            relayoutData["yaxis.autorange"] = False
-
-        fig2.plotly_update(relayout_data=relayoutData)
-        return relayoutData, fig2
-    second = False
-
-
-@app.callback(Output("first_graph", "relayoutData"),
-              Output("first_graph", "figure"),
-              Input('second_graph', 'relayoutData'))
-def display_relayout_data(relayoutData):
-    global first, second
-
-    if not first:
-
-        second = True
-
-        if relayoutData and "autosize" in relayoutData and relayoutData["autosize"]:
-            fig.layout = {"autosize": True}
-        elif relayoutData and "yaxis.autorange" not in relayoutData:
-            relayoutData["yaxis.autorange"] = False
-
-        fig.plotly_update(relayout_data=relayoutData)
-        return relayoutData, fig
-    first = False
-
-
-# app.run(host='127.0.0.1', port=5000)  # debug=True
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        app.run(host=sys.argv[1], port=int(sys.argv[2]))
-    else:
-        print(sys.argv)
-        app.run(host="localhost", port=5000)
+# app.run(host=sys.argv[1], port=int(sys.argv[2]))

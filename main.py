@@ -1,7 +1,4 @@
 import plotly.graph_objects as go
-import trace_updater
-from plotly_resampler import FigureResampler
-from dash import Dash, html, dcc, Input, Output
 from dash.html import Div, Em, Span, A, Img, Br
 import pandas as pd
 from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
@@ -11,7 +8,7 @@ from plotly_resampler.aggregation import MedDiffGapHandler
 from h5py import File
 from dash import Dash, html, dcc, Input, Output
 import sys
-
+from math import floor, ceil
 
 app = Dash(__name__)
 
@@ -22,43 +19,9 @@ time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
 size = time.size
 
 
-class Keogram:
-    def __init__(self, filename="./mat/matlab.mat", max_n_samples=1000):
-        diag_global = file.get("diag_global")
-        diag_global = np.rot90(diag_global)
-        file.close()
-        self.first_diag = {
-            "x": time,
-            "y": diag_global[0],
-            "max_n_samples": max_n_samples,
-            "downsampler": MinMaxAggregator(),
-            "gap_handler": MedDiffGapHandler()
-        }
-        self.data = diag_global[1:]
-        data = self.update()
-        self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1]))
-        self.dcc = dcc.Graph(id="keogram", figure=self.figure)
-
-    def update(self, relayoutData=None):
-        res = []
-        start, end = 0, size
-        if relayoutData and "xaxis.range[0]" in relayoutData:
-            start, end = PlotlyAggregatorParser.get_start_end_indices(self.first_diag,
-                                                                      start=relayoutData["xaxis.range[0]"],
-                                                                      end=relayoutData["xaxis.range[1]"],
-                                                                      axis_type="date")
-
-        x, y, indexes = PlotlyAggregatorParser.aggregate(self.first_diag, start, end)
-        res.append(y)
-
-        for i in range(15):
-            res.append(self.data[i][indexes])
-        return x, res
-
-
 class Lightcurve:
-    def __init__(self, filename="./mat/matlab.mat", max_n_samples=1000):
-        file = File(filename)
+    def __init__(self, max_n_samples=1000):
+        self.max_n_samples = max_n_samples
 
         self.light = {
             "x": time,
@@ -67,19 +30,135 @@ class Lightcurve:
             "downsampler": MinMaxAggregator(),
             "gap_handler": MedDiffGapHandler()
         }
+        self.size = time.size
         data = self.update()
         self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]))
-        self.dcc = dcc.Graph(id="lightcurve", figure=self.figure)
+
+        self.dcc = html.Div([
+            dcc.Graph(id="lightcurve", figure=self.figure, style={'float': 'left', "width": "90%"}),
+            html.Div(style={'float': 'right'})
+        ])
+
+        @app.callback(Output('lightcurve', 'figure'),
+                      Output('keogram', 'relayoutData'),
+                      Input('lightcurve', 'relayoutData'))
+        def update_lightcurve(relayoutData):
+            data = self.update(relayoutData)
+            self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]))
+            res = None
+            if relayoutData:
+                self.figure.plotly_relayout(relayoutData)
+                if "xaxis.range[0]" in relayoutData:
+                    res = {
+                        "xaxis.range[0]": relayoutData["xaxis.range[0]"],
+                        "xaxis.range[1]": relayoutData["xaxis.range[1]"]
+                    }
+            return self.figure, res
 
     def update(self, relayoutData=None):
-        start, end = 0, size
-        if relayoutData and "xaxis.range[0]" in relayoutData:
-            start, end = PlotlyAggregatorParser.get_start_end_indices(self.light,
-                                                                      start=relayoutData["xaxis.range[0]"],
-                                                                      end=relayoutData["xaxis.range[1]"],
-                                                                      axis_type="date")
+
+        start, end = 0, self.size
+
+        if relayoutData:
+            if "xaxis.range[0]" in relayoutData:
+                start, end = PlotlyAggregatorParser.get_start_end_indices(self.light,
+                                                                          start=relayoutData["xaxis.range[0]"],
+                                                                          end=relayoutData["xaxis.range[1]"],
+                                                                          axis_type="date")
+
         x, y, indexes = PlotlyAggregatorParser.aggregate(self.light, start, end)
         return x, y
+
+
+class Keogram:
+    def __init__(self, max_n_samples=1000):
+        self.max_n_samples = max_n_samples
+        diag_global = file.get("diag_global")
+        diag_global = np.rot90(diag_global)
+        self.min = diag_global.min(initial=0)
+        self.max = diag_global.max(initial=0)
+        self.size = time.size
+        self.yrange = [0, 15]
+        self.data = diag_global
+        data = self.update()
+        self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1]))
+        self.slider = dcc.RangeSlider(self.min,
+                                      self.max,
+                                      value=[self.min, self.max],
+                                      step=100,
+                                      vertical=True,
+                                      marks=None,
+                                      tooltip={"placement": "left", "always_visible": True},
+                                      id="keogram_slider")
+        self.dcc = html.Div([
+            dcc.Graph(id="keogram", figure=self.figure, style={'float': 'left', "width": "90%"}),
+            html.Div(self.slider, style={'float': 'right'})
+        ])
+
+        @app.callback(
+            Output('keogram', 'figure', allow_duplicate=True),
+            Input('keogram_slider', 'value'), prevent_initial_call=True)
+        def update_minmax(value):
+            self.min = value[0]
+            self.max = value[1]
+            return self.figure.update_traces({"zmin": self.min, "zmax": self.max})
+
+        @app.callback(Output('keogram', 'figure'),
+                      Output('lightcurve', 'relayoutData'),
+                      Input('keogram', 'relayoutData'))
+        def update_keogram(relayoutData):
+            data = keogram.update(relayoutData)
+            self.yrange = data[2]
+            self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1], zmin=self.min, zmax=self.max),
+                                    layout_yaxis_range=data[2])
+            res = None
+            if relayoutData:
+                if "xaxis.range[0]" in relayoutData:
+                    res = {
+                        "xaxis.range[0]": relayoutData["xaxis.range[0]"],
+                        "xaxis.range[1]": relayoutData["xaxis.range[1]"]
+                    }
+            return self.figure, res
+
+    def update(self, relayoutData=None):
+
+        res = []
+        start, end = 0, self.size
+        min_y, max_y = self.yrange[0], self.yrange[1]
+        first = {
+            "x": time,
+            "y": self.data[0],
+            "max_n_samples": self.max_n_samples,
+            "downsampler": MinMaxAggregator(),
+            "gap_handler": MedDiffGapHandler()
+        }
+
+        if relayoutData:
+            if "xaxis.range[0]" in relayoutData:
+                start, end = PlotlyAggregatorParser.get_start_end_indices(first,
+                                                                          start=relayoutData["xaxis.range[0]"],
+                                                                          end=relayoutData["xaxis.range[1]"],
+                                                                          axis_type="date")
+            if 'yaxis.range[0]' in relayoutData:
+                min_y = max(0, floor(relayoutData["yaxis.range[0]"]))
+                max_y = min(15, ceil(relayoutData["yaxis.range[1]"]))
+
+            if "autosize" in relayoutData or "yaxis.autorange" in relayoutData:
+                min_y, max_y = 0, 15
+        x = None
+
+        for i in range(16):
+            diag = {
+                "x": time,
+                "y": self.data[i],
+                "max_n_samples": self.max_n_samples,
+                "downsampler": MinMaxAggregator(),
+                "gap_handler": MedDiffGapHandler()
+            }
+            x, y, indexes = PlotlyAggregatorParser.aggregate(diag, start, end)
+            res.append(y)
+
+        return x, res, [min_y, max_y]
 
 
 head_bar = Div(

@@ -53,7 +53,7 @@ class Keogram:
         @app.callback(Output('keogram', 'figure'),
                       Input('keogram', 'relayoutData'))
         def update_keogram(relayoutData):
-            data = keogram.update(relayoutData)
+            data = self.update(relayoutData)
             self.yrange = data[2]
             self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1], zmin=self.min, zmax=self.max),
                                     layout_yaxis_range=data[2])
@@ -79,8 +79,8 @@ class Keogram:
                                                                           end=relayoutData["xaxis.range[1]"],
                                                                           axis_type="date")
             if 'yaxis.range[0]' in relayoutData:
-                min_y = max(min_y, floor(relayoutData["yaxis.range[0]"]))
-                max_y = min(max_y, ceil(relayoutData["yaxis.range[1]"]))
+                min_y = max(0, floor(relayoutData["yaxis.range[0]"]))
+                max_y = min(15, ceil(relayoutData["yaxis.range[1]"]))
 
             if "autosize" in relayoutData or "yaxis.autorange" in relayoutData:
                 min_y, max_y = 0, 15
@@ -106,6 +106,6 @@ app.layout = html.Div([
     keogram.dcc
 ])
 
-# app.run(host='127.0.0.1', port=5050, debug=True)
+app.run(host='127.0.0.1', port=5050, debug=True)
 
-app.run(host=sys.argv[1], port=int(sys.argv[2]))
+# app.run(host=sys.argv[1], port=int(sys.argv[2]))
