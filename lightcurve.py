@@ -66,6 +66,9 @@ app.layout = html.Div([
     lightcurve.dcc
 ])
 
-app.run(host='127.0.0.1', port=5000, debug=True)
-
-# app.run(host=sys.argv[1], port=int(sys.argv[2]))
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        app.run(host=sys.argv[1], port=int(sys.argv[2]), debug=True)
+    else:
+        print(sys.argv)
+        app.run(host="localhost", port=5000, debug=True)

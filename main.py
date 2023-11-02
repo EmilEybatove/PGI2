@@ -9,6 +9,7 @@ from h5py import File
 from dash import Dash, html, dcc, Input, Output
 import sys
 from math import floor, ceil
+from frame import Frame
 
 app = Dash(__name__)
 
@@ -204,11 +205,13 @@ head = Div(
 
 lightcurve = Lightcurve()
 keogram = Keogram()
+frame = Frame()
 
 app.layout = Div([
     head,
     lightcurve.dcc,
-    keogram.dcc
+    keogram.dcc,
+    frame.dcc,
 ])
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
-from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
+import sys
+
 import numpy as np
+from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
 from plotly_resampler.aggregation.aggregators import MinMaxAggregator
 from plotly_resampler.aggregation import MedDiffGapHandler
 from h5py import File
@@ -7,7 +9,6 @@ import plotly.graph_objects as go
 from dash import Dash, html, dcc, Input, Output
 import pandas as pd
 from math import floor, ceil
-import sys
 
 app = Dash(__name__)
 
@@ -39,7 +40,7 @@ class Keogram:
                                       id="keogram_slider")
         self.dcc = html.Div([
             dcc.Graph(id="keogram", figure=self.figure, style={'float': 'left', "width": "90%"}),
-            html.Div(self.slider, style={'float': 'right'})
+            html.Div(self.slider, style={'float': 'right'}),
         ])
 
         @app.callback(
@@ -60,7 +61,6 @@ class Keogram:
             return self.figure
 
     def update(self, relayoutData=None):
-
         res = []
         start, end = 0, self.size
         min_y, max_y = self.yrange[0], self.yrange[1]
@@ -106,6 +106,10 @@ app.layout = html.Div([
     keogram.dcc
 ])
 
-app.run(host='127.0.0.1', port=5050, debug=True)
 
-# app.run(host=sys.argv[1], port=int(sys.argv[2]))
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        app.run(host=sys.argv[1], port=int(sys.argv[2]), debug=True)
+    else:
+        print(sys.argv)
+        app.run(host="localhost", port=5005, debug=True)
