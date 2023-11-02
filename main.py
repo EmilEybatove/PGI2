@@ -1,15 +1,14 @@
-import plotly.graph_objects as go
-from dash.html import Div, Em, Span, A, Img, Br
-import pandas as pd
-from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
-import numpy as np
-from plotly_resampler.aggregation.aggregators import MinMaxAggregator
-from plotly_resampler.aggregation import MedDiffGapHandler
-from h5py import File
-from dash import Dash, html, dcc, Input, Output
-import sys
 from math import floor, ceil
-from frame import Frame
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from dash import Dash, html, dcc, Input, Output
+from dash.html import Div, Em, Span, A, Img, Br
+from h5py import File
+from plotly_resampler.aggregation import MedDiffGapHandler
+from plotly_resampler.aggregation.aggregators import MinMaxAggregator
+from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
 
 app = Dash(__name__)
 
@@ -205,13 +204,11 @@ head = Div(
 
 lightcurve = Lightcurve()
 keogram = Keogram()
-frame = Frame()
 
 app.layout = Div([
     head,
     lightcurve.dcc,
     keogram.dcc,
-    frame.dcc,
 ])
 
 if __name__ == "__main__":

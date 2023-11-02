@@ -1,13 +1,13 @@
-from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
+import sys
+
 import numpy as np
-from plotly_resampler.aggregation.aggregators import MinMaxAggregator
-from plotly_resampler.aggregation import MedDiffGapHandler
-from h5py import File
+import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, html, dcc, Input, Output
-import pandas as pd
-from math import floor, ceil
-import sys
+from h5py import File
+from plotly_resampler.aggregation import MedDiffGapHandler
+from plotly_resampler.aggregation.aggregators import MinMaxAggregator
+from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
 
 app = Dash(__name__)
 
