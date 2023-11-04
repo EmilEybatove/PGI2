@@ -22,7 +22,7 @@ size = time.size
 class Lightcurve:
     def __init__(self, max_n_samples=1000):
         self.max_n_samples = max_n_samples
-
+        self.indexes = None
         self.light = {
             "x": time,
             "y": np.ravel(file.get("lightcurvesum_global")),
@@ -32,7 +32,8 @@ class Lightcurve:
         }
         self.size = time.size
         data = self.update()
-        self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]))
+        self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]),
+                                layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 50}))
 
         self.dcc = html.Div([
             dcc.Graph(id="lightcurve", figure=self.figure, style={'float': 'left', "width": "90%"}),
@@ -44,15 +45,19 @@ class Lightcurve:
                       Input('lightcurve', 'relayoutData'))
         def update_lightcurve(relayoutData):
             data = self.update(relayoutData)
-            self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]))
+            self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]),
+                                    layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 70}))
             res = None
             if relayoutData:
+                # TODO Возникают проблемы, если масштабировать тоьлко по ондой оси. Функция plotly_relayout считает это перезагрузкой графика по отсутствующей оси. Нужно понять, каким образом он берёт данные для построения этого, если это происходит после аггрегирования
                 self.figure.plotly_relayout(relayoutData)
                 if "xaxis.range[0]" in relayoutData:
                     res = {
                         "xaxis.range[0]": relayoutData["xaxis.range[0]"],
                         "xaxis.range[1]": relayoutData["xaxis.range[1]"]
                     }
+                if "autosize" in relayoutData or "yaxis.autorange" in relayoutData:
+                    res = relayoutData
             return self.figure, res
 
     def update(self, relayoutData=None):
@@ -66,7 +71,8 @@ class Lightcurve:
                                                                           end=relayoutData["xaxis.range[1]"],
                                                                           axis_type="date")
 
-        x, y, indexes = PlotlyAggregatorParser.aggregate(self.light, start, end)
+        x, y, self.indexes = PlotlyAggregatorParser.aggregate(self.light, start, end)
+        self.indexes += start
         return x, y
 
 
@@ -81,7 +87,8 @@ class Keogram:
         self.yrange = [0, 15]
         self.data = diag_global
         data = self.update()
-        self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1]))
+        self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1]),
+                                layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 20}))
         self.slider = dcc.RangeSlider(self.min,
                                       self.max,
                                       value=[self.min, self.max],
@@ -110,7 +117,8 @@ class Keogram:
             data = keogram.update(relayoutData)
             self.yrange = data[2]
             self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1], zmin=self.min, zmax=self.max),
-                                    layout_yaxis_range=data[2])
+                                    layout_yaxis_range=data[2],
+                                    layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 20}))
             res = None
             if relayoutData:
                 if "xaxis.range[0]" in relayoutData:
@@ -118,6 +126,8 @@ class Keogram:
                         "xaxis.range[0]": relayoutData["xaxis.range[0]"],
                         "xaxis.range[1]": relayoutData["xaxis.range[1]"]
                     }
+                if "autosize" in relayoutData or "yaxis.autorange" in relayoutData:
+                    res = relayoutData
             return self.figure, res
 
     def update(self, relayoutData=None):
@@ -159,6 +169,32 @@ class Keogram:
             res.append(y)
 
         return x, res, [min_y, max_y]
+
+
+class Frame:
+    def __init__(self, lightcurve):
+        self.lightcurve = lightcurve
+        self.pdm_2d_rot_global = file.get("pdm_2d_rot_global")
+        self.figure = go.Figure()
+        self.index = 0
+        self.dcc = html.Div([
+            dcc.Graph(id="frame", figure=self.figure, style={'float': 'left', "width": "90%"}),
+            html.Div(style={'float': 'right'})
+        ])
+
+        @app.callback(
+            Output('frame', 'figure'),
+            Input('lightcurve', 'clickData'),
+            Input('lightcurve', 'relayoutData'))
+        def lightcurbe_click_event(value, relayoutData):
+            if value:
+                self.index = lightcurve.indexes[value["points"][0]["pointIndex"]]
+            elif relayoutData:
+                self.index = lightcurve.indexes[0]
+            self.figure = go.Figure(data=go.Heatmap(z=self.pdm_2d_rot_global[self.index]),
+                                    layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 20}))
+            self.figure.update_layout(title={"text": str(time[self.index]).split("T")[1], 'x': 0.5})
+            return self.figure
 
 
 head_bar = Div(
@@ -204,12 +240,14 @@ head = Div(
 
 lightcurve = Lightcurve()
 keogram = Keogram()
+frame = Frame(lightcurve)
 
 app.layout = Div([
     head,
     lightcurve.dcc,
-    keogram.dcc
+    keogram.dcc,
+    frame.dcc
 ])
 
 if __name__ == "__main__":
-    app.run('127.0.0.1', port=5001)
+    app.run('127.0.0.1', port=5001)  # debug=True
