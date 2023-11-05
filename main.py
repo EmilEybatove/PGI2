@@ -178,23 +178,37 @@ class Frame:
         self.figure = go.Figure()
         self.index = 0
         self.dcc = html.Div([
-            dcc.Graph(id="frame", figure=self.figure, style={'float': 'left', "width": "90%"}),
-            html.Div(style={'float': 'right'})
+            dcc.Graph(id="frame", figure=self.figure, style={"display": "table", "margin": "0 auto"})
         ])
 
         @app.callback(
-            Output('frame', 'figure'),
-            Input('lightcurve', 'clickData'),
-            Input('lightcurve', 'relayoutData'))
-        def lightcurbe_click_event(value, relayoutData):
+            Output('frame', 'figure', allow_duplicate=True),
+            Input('lightcurve', 'clickData'), prevent_initial_call=True)
+        def lightcurbe_click_event(value):
+            print(value)
             if value:
                 self.index = lightcurve.indexes[value["points"][0]["pointIndex"]]
-            elif relayoutData:
-                self.index = lightcurve.indexes[0]
-            self.figure = go.Figure(data=go.Heatmap(z=self.pdm_2d_rot_global[self.index]),
-                                    layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 20}))
-            self.figure.update_layout(title={"text": str(time[self.index]).split("T")[1], 'x': 0.5})
+                self.update()
+
             return self.figure
+
+        @app.callback(
+            Output('frame', 'figure', allow_duplicate=True),
+            Input('lightcurve', 'relayoutData'), prevent_initial_call=True)
+        def lightcurbe_relayout_event(relayoutData):
+            print(relayoutData)
+            if relayoutData:
+                self.index = lightcurve.indexes[0]
+                self.update()
+            return self.figure
+
+    def update(self):
+        self.figure = go.Figure(data=go.Heatmap(z=self.pdm_2d_rot_global[self.index]),
+                                layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 20}))
+        self.figure.update_layout(title={"text": str(time[self.index]).split("T")[1],
+                                         "x": 0.5},
+                                  width=700,
+                                  height=700)
 
 
 head_bar = Div(
@@ -250,4 +264,4 @@ app.layout = Div([
 ])
 
 if __name__ == "__main__":
-    app.run('127.0.0.1', port=5001)  # debug=True
+    app.run('127.0.0.1', port=5001, debug=True)
