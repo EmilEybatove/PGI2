@@ -1,5 +1,5 @@
 import plotly.graph_objects as go
-from dash.html import Div, Em, Span, A, Img, Br
+from dash.html import Div, Em, Span, A, Img, Br, P, Button, H4
 import pandas as pd
 from plotly_resampler.aggregation.plotly_aggregator_parser import PlotlyAggregatorParser
 import numpy as np
@@ -7,16 +7,17 @@ from plotly_resampler.aggregation.aggregators import MinMaxAggregator
 from plotly_resampler.aggregation import MedDiffGapHandler
 from h5py import File
 from dash import Dash, html, dcc, Input, Output
-import sys
+import os
 from math import floor, ceil
+import dash_bootstrap_components as dbc
+from nested_dropdown_menu import nested_dropdown_menu
+import sys
 
-app = Dash(__name__)
+JQUERY_CDN_URL = 'https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js'
 
-filename = "./mat/matlab.mat"
-file = File(filename)
-time = np.ravel(file.get("unixtime_dbl_global"))
-time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
-size = time.size
+dirname = "a"
+if len(sys.argv) > 1:
+    dirname = sys.argv[2]
 
 
 class Lightcurve:
@@ -30,7 +31,6 @@ class Lightcurve:
             "downsampler": MinMaxAggregator(),
             "gap_handler": MedDiffGapHandler()
         }
-        self.size = time.size
         data = self.update()
         self.figure = go.Figure(data=go.Scattergl(x=data[0], y=data[1]),
                                 layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 50}))
@@ -62,7 +62,7 @@ class Lightcurve:
 
     def update(self, relayoutData=None):
 
-        start, end = 0, self.size
+        start, end = 0, size
 
         if relayoutData:
             if "xaxis.range[0]" in relayoutData:
@@ -83,12 +83,12 @@ class Keogram:
         diag_global = np.rot90(diag_global)
         self.min = diag_global.min(initial=0)
         self.max = diag_global.max(initial=0)
-        self.size = time.size
         self.yrange = [0, 15]
         self.data = diag_global
         data = self.update()
         self.figure = go.Figure(data=go.Heatmap(x=data[0], z=data[1]),
                                 layout=go.Layout(margin={'t': 30, 'l': 20, 'b': 20, 'r': 20}))
+        print(f"min, max: ", self.min, self.max)
         self.slider = dcc.RangeSlider(self.min,
                                       self.max,
                                       value=[self.min, self.max],
@@ -99,7 +99,7 @@ class Keogram:
                                       id="keogram_slider")
         self.dcc = html.Div([
             dcc.Graph(id="keogram", figure=self.figure, style={'float': 'left', "width": "90%"}),
-            html.Div(self.slider, style={'float': 'right'})
+            html.Div(self.slider, style={'float': 'right'}, id="slider_id")
         ])
 
         @app.callback(
@@ -111,8 +111,8 @@ class Keogram:
             return self.figure.update_traces({"zmin": self.min, "zmax": self.max})
 
         @app.callback(Output('keogram', 'figure'),
-                      Output('lightcurve', 'relayoutData'),
-                      Input('keogram', 'relayoutData'))
+                      Output('lightcurve', 'relayoutData', allow_duplicate=True),
+                      Input('keogram', 'relayoutData'), prevent_initial_call=True)
         def update_keogram(relayoutData):
             data = keogram.update(relayoutData)
             self.yrange = data[2]
@@ -133,7 +133,7 @@ class Keogram:
     def update(self, relayoutData=None):
 
         res = []
-        start, end = 0, self.size
+        start, end = 0, size
         min_y, max_y = self.yrange[0], self.yrange[1]
         first = {
             "x": time,
@@ -185,7 +185,6 @@ class Frame:
             Output('frame', 'figure', allow_duplicate=True),
             Input('lightcurve', 'clickData'), prevent_initial_call=True)
         def lightcurbe_click_event(value):
-            print(value)
             if value:
                 self.index = lightcurve.indexes[value["points"][0]["pointIndex"]]
                 self.update()
@@ -196,7 +195,6 @@ class Frame:
             Output('frame', 'figure', allow_duplicate=True),
             Input('lightcurve', 'relayoutData'), prevent_initial_call=True)
         def lightcurbe_relayout_event(relayoutData):
-            print(relayoutData)
             if relayoutData:
                 self.index = lightcurve.indexes[0]
                 self.update()
@@ -209,6 +207,22 @@ class Frame:
                                          "x": 0.5},
                                   width=700,
                                   height=700)
+
+
+filename = None
+
+
+def parse_dir(dir, start_dir):
+    global filename
+    res = []
+    for name in os.listdir(dir):
+        if os.path.isfile(f"{dir}/{name}"):
+            if not filename:
+                filename = f"{dir}/{name}"
+            res.append({'label': name, "href": f"{dir}/{name}".lstrip(start_dir)})
+        else:
+            res.append({'label': name, "children": parse_dir(f"{dir}/{name}", start_dir)})
+    return res
 
 
 head_bar = Div(
@@ -252,16 +266,112 @@ head = Div(
     children=[head_bar, head_center]
 )
 
+app = Dash(__name__,
+           external_scripts=[JQUERY_CDN_URL],
+           external_stylesheets=[dbc.themes.BOOTSTRAP]
+           )
+
+# filename = "./mat/matlab.mat"
+
+
+dropdown = html.Div([dcc.Location(id='url', refresh=False),
+                     nested_dropdown_menu(
+                         label='files',
+                         menu_structure=parse_dir(dirname, dirname)
+                     ),
+                     Div(id='file')
+                     ],
+                    style={"float": "left", "width": "20%"},
+                    )
+
+file = File(filename)
+time = np.ravel(file.get("unixtime_dbl_global"))
+time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
+size = time.size
+
 lightcurve = Lightcurve()
 keogram = Keogram()
 frame = Frame(lightcurve)
 
-app.layout = Div([
-    head,
+main = html.Div([
     lightcurve.dcc,
     keogram.dcc,
     frame.dcc
+], style={'float': 'right', "width": "80%"})
+
+app.layout = Div([
+    head,
+    dropdown,
+    main
 ])
 
+
+@app.callback(
+    Output('file', 'children'),
+    Output('lightcurve', 'relayoutData', allow_duplicate=True),
+    Output("slider_id", "children"),
+    [Input('url', 'pathname')],
+    prevent_initial_call=True
+)
+def update_output(pathname):
+    global filename, file, time, size
+
+    if pathname not in ("/", "\\"):
+
+        filename = dirname + pathname
+        file = File(filename)
+        time = np.ravel(file.get("unixtime_dbl_global"))
+        time = pd.to_datetime(pd.Series(time), unit="s").to_numpy()
+        size = time.size
+        lightcurve.indexes = None
+        lightcurve.light = {
+            "x": time,
+            "y": np.ravel(file.get("lightcurvesum_global")),
+            "max_n_samples": lightcurve.max_n_samples,
+            "downsampler": MinMaxAggregator(),
+            "gap_handler": MedDiffGapHandler()
+        }
+
+        diag_global = file.get("diag_global")
+        diag_global = np.rot90(diag_global)
+        keogram.min = diag_global.min(initial=0)
+        keogram.max = diag_global.max(initial=0)
+        keogram.yrange = [0, 15]
+        keogram.data = diag_global
+
+        frame.pdm_2d_rot_global = file.get("pdm_2d_rot_global")
+        frame.index = 0
+
+        keogram.slider = dcc.RangeSlider(keogram.min,
+                                         keogram.max,
+                                         value=[keogram.min, keogram.max],
+                                         step=100,
+                                         vertical=True,
+                                         marks=None,
+                                         tooltip={"placement": "left", "always_visible": True},
+                                         id="keogram_slider")
+        print(f"min, max: ", keogram.min, keogram.max)
+
+    return Div([
+        Br(),
+        H4(f'Скачать файл'),
+        Button(pathname, id="download-button", className="btn btn-primary"),
+        dcc.Download(id="download-current-file")
+    ]), {'autosize': True}, keogram.slider
+
+
+@app.callback(
+    Output("download-current-file", "data"),
+    Input("download-button", "n_clicks"),
+    prevent_initial_call=True
+)
+def get_data(n_click):
+    return dcc.send_file(filename)
+
+
 if __name__ == "__main__":
-    app.run('127.0.0.1', port=5001, debug=True)
+    if len(sys.argv) > 1:
+        app.run(host=sys.argv[1], port=int(sys.argv[2]))
+    else:
+        print(sys.argv)
+        app.run(host="localhost", port=5002, debug=True)
