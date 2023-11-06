@@ -17,7 +17,7 @@ JQUERY_CDN_URL = 'https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.
 
 dirname = "a"
 if len(sys.argv) > 1:
-    dirname = sys.argv[2]
+    dirname = sys.argv[3]
 
 
 class Lightcurve:
