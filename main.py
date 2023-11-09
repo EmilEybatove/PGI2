@@ -317,7 +317,6 @@ def update_output(pathname):
     global filename, file, time, size
 
     if pathname not in ("/", "\\"):
-
         filename = dirname + pathname
         file = File(filename)
         time = np.ravel(file.get("unixtime_dbl_global"))
@@ -354,19 +353,8 @@ def update_output(pathname):
 
     return Div([
         Br(),
-        H4(f'Скачать файл'),
-        Button(pathname, id="download-button", className="btn btn-primary"),
-        dcc.Download(id="download-current-file")
+        H4(f'Скачать файл')
     ]), {'autosize': True}, keogram.slider
-
-
-@app.callback(
-    Output("download-current-file", "data"),
-    Input("download-button", "n_clicks"),
-    prevent_initial_call=True
-)
-def get_data(n_click):
-    return dcc.send_file(filename)
 
 
 if __name__ == "__main__":
